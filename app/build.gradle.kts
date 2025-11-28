@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.tools.textextracttool"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.tools.textextracttool"
         minSdk = 31
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -36,6 +36,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     // Include META-INF as an assets source for LSPosed descriptors, and jniLibs at module root
     sourceSets {

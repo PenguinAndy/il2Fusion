@@ -9,4 +9,5 @@ package com.tools.module
  */
 object NativeBridge {
     @JvmStatic external fun init()
+    @JvmStatic external fun updateHookTargets(targets: LongArray)
 }

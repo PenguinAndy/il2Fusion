@@ -2,6 +2,7 @@ package com.tools.module
 
 import android.content.Context
 import com.tools.textextracttool.BuildConfig
+import com.tools.textextracttool.config.HookConfigStore
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -42,6 +43,12 @@ class MainHook: IXposedHookLoadPackage {
                     val ctx = param.args[0] as Context
                     XposedBridge.log("$TAG Application.attach -> ctx=$ctx")
 
+                    // 提示：LSPosed 勾选多个 App 可能导致互相覆盖
+                    val enabledApps = HookConfigStore.markHookedPackage(ctx, lpparam.packageName)
+                    if (enabledApps.size > 1) {
+                        XposedBridge.log("$TAG Warning: LSPosed 勾选了多个 App，hook 只针对当前进程。建议单次只勾选一个目标包")
+                    }
+
                     // Load native so
                     try {
                         System.loadLibrary(NATIVE_LIB)
@@ -56,6 +63,15 @@ class MainHook: IXposedHookLoadPackage {
                         XposedBridge.log("$TAG Native init() call")
                     } catch (e: Throwable) {
                         XposedBridge.log("$TAG Native init() failed: $e")
+                    }
+
+                    // 下发当前配置的 RVA 列表
+                    try {
+                        val rvas = HookConfigStore.loadRvas(ctx).toLongArray()
+                        NativeBridge.updateHookTargets(rvas)
+                        XposedBridge.log("$TAG updateHookTargets -> ${rvas.joinToString()}")
+                    } catch (e: Throwable) {
+                        XposedBridge.log("$TAG updateHookTargets failed: $e")
                     }
 
                 }

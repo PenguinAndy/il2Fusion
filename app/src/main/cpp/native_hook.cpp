@@ -6,6 +6,8 @@
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
+#include <dlfcn.h>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -22,17 +24,6 @@ namespace {
 constexpr const char* kLibIl2cpp = "libil2cpp.so";
 constexpr const char* kTargetText = "Hook Test";
 
-struct MethodSpec {
-    const char* name;
-    uintptr_t rva;
-};
-
-const MethodSpec kTextSetters[] = {
-        {"FairyGUI.TextField.set_text", 0x1d236e8},
-        {"FairyGUI.GTextField.set_text", 0x1eb7bdc},
-        {"UnityEngine.TextMesh.set_text", 0x3b08694},
-};
-
 struct Il2CppString {
     void* klass;
     void* monitor;
@@ -42,10 +33,18 @@ struct Il2CppString {
 
 using Il2CppStringNewFn = Il2CppString* (*)(const char*);
 
+struct HookRegistry {
+    std::unordered_map<void*, uintptr_t> targets;  // address -> rva
+};
+
 std::atomic_bool g_initialized{false};
-std::unordered_map<void*, const MethodSpec*> g_hookMap;
-Il2CppString* g_managedText{nullptr};
-Il2CppStringNewFn g_stringNew{nullptr};
+std::mutex g_hookMutex;
+std::vector<uintptr_t> g_rvas;
+std::vector<void*> g_installedTargets;
+std::atomic<HookRegistry*> g_registry{nullptr};
+uintptr_t g_il2cpp_base = 0;
+Il2CppString* g_managedText = nullptr;
+Il2CppStringNewFn g_stringNew = nullptr;
 
 uintptr_t find_module_base(const char* name) {
     FILE* fp = fopen("/proc/self/maps", "r");
@@ -86,7 +85,7 @@ std::string narrow_from_utf16(const char16_t* data, int32_t len) {
     std::string out;
     out.reserve(len);
     for (int32_t i = 0; i < len; ++i) {
-        char16_t c = data[i];
+        const char16_t c = data[i];
         if (c < 0x80) {
             out.push_back(static_cast<char>(c));
         } else {
@@ -119,8 +118,7 @@ void* get_second_arg(DobbyRegisterContext* ctx) {
 #elif defined(__x86_64__)
     return reinterpret_cast<void*>(ctx->general.regs.rsi);
 #elif defined(__i386__)
-    // esp + 4 holds the second argument on i386 cdecl/stdcall
-    return nullptr;
+    return nullptr;  // extend if needed
 #else
     return nullptr;
 #endif
@@ -134,18 +132,20 @@ void set_second_arg(DobbyRegisterContext* ctx, void* value) {
 #elif defined(__x86_64__)
     ctx->general.regs.rsi = reinterpret_cast<uint64_t>(value);
 #elif defined(__i386__)
-    // Not implemented for i386; extend if needed.
-    (void) value;
+    (void) value;  // extend if needed
 #else
     (void) value;
 #endif
 }
 
 void setter_pre_handler(void* address, DobbyRegisterContext* ctx) {
-    const MethodSpec* spec = nullptr;
-    auto it = g_hookMap.find(address);
-    if (it != g_hookMap.end()) {
-        spec = it->second;
+    HookRegistry* registry = g_registry.load();
+    uintptr_t rva = 0;
+    if (registry) {
+        auto it = registry->targets.find(address);
+        if (it != registry->targets.end()) {
+            rva = it->second;
+        }
     }
 
     if (g_managedText == nullptr) {
@@ -156,19 +156,24 @@ void setter_pre_handler(void* address, DobbyRegisterContext* ctx) {
     const auto original = describe_il2cpp_string(reinterpret_cast<Il2CppString*>(arg));
 
     if (!original.empty() && original != kTargetText) {
-        LOGI("[Setter] %s 原始内容: %s", spec ? spec->name : "<unknown>", original.c_str());
+        LOGI("[Setter] RVA 0x%" PRIxPTR " 原始内容: %s", rva, original.c_str());
     }
 
     set_second_arg(ctx, g_managedText);
 }
 
 bool prepare_il2cpp_factory() {
-    g_stringNew = reinterpret_cast<Il2CppStringNewFn>(
-            DobbySymbolResolver(kLibIl2cpp, "il2cpp_string_new"));
-    if (!g_stringNew) {
-        g_stringNew = reinterpret_cast<Il2CppStringNewFn>(
-                DobbySymbolResolver(nullptr, "il2cpp_string_new"));
+    void* handle = dlopen(kLibIl2cpp, RTLD_NOW | RTLD_NOLOAD);
+    if (!handle) {
+        handle = dlopen(nullptr, RTLD_NOW);
     }
+    if (!handle) {
+        LOGE("dlopen failed when resolving il2cpp_string_new");
+        return false;
+    }
+
+    g_stringNew = reinterpret_cast<Il2CppStringNewFn>(
+            dlsym(handle, "il2cpp_string_new"));
 
     if (!g_stringNew) {
         LOGE("无法找到 il2cpp_string_new");
@@ -184,45 +189,80 @@ bool prepare_il2cpp_factory() {
     return true;
 }
 
-void install_hooks() {
+void clear_hooks_locked() {
+    for (void* target : g_installedTargets) {
+        const int ret = DobbyDestroy(target);
+        if (ret != 0) {
+            LOGE("销毁 hook @%p 失败, ret=%d", target, ret);
+        }
+    }
+    g_installedTargets.clear();
+
+    HookRegistry* old = g_registry.exchange(nullptr);
+    delete old;
+}
+
+void install_hooks_locked() {
 #if !defined(__arm__) && !defined(__aarch64__) && !defined(__x86_64__) && !defined(__i386__)
     LOGE("当前架构不支持文本拦截");
     return;
 #endif
 
-    const auto base = wait_for_module(kLibIl2cpp, std::chrono::seconds(10));
-    if (base == 0) {
+    if (g_il2cpp_base == 0 || g_managedText == nullptr) {
+        LOGE("il2cpp 未准备好，跳过安装 hook");
+        return;
+    }
+
+    if (g_rvas.empty()) {
+        LOGI("未配置任何 RVA，跳过安装 hook");
+        return;
+    }
+
+    clear_hooks_locked();
+
+    HookRegistry* registry = new HookRegistry();
+
+    for (uintptr_t rva : g_rvas) {
+        void* target = reinterpret_cast<void*>(g_il2cpp_base + rva);
+        const int ret = DobbyInstrument(target, setter_pre_handler);
+        if (ret == 0) {
+            g_installedTargets.push_back(target);
+            registry->targets[target] = rva;
+            LOGI("Hooked RVA 0x%" PRIxPTR " @ %p", rva, target);
+        } else {
+            LOGE("Hook RVA 0x%" PRIxPTR " 失败, ret=%d", rva, ret);
+        }
+    }
+
+    HookRegistry* old = g_registry.exchange(registry);
+    delete old;
+}
+
+void update_rvas(const std::vector<uintptr_t>& newRvas) {
+    std::lock_guard<std::mutex> _lk(g_hookMutex);
+    g_rvas = newRvas;
+    LOGI("更新 RVA 列表，共 %zu 个", g_rvas.size());
+
+    if (g_il2cpp_base != 0 && g_managedText != nullptr) {
+        install_hooks_locked();
+    }
+}
+
+void init_worker() {
+    g_il2cpp_base = wait_for_module(kLibIl2cpp, std::chrono::seconds(10));
+    if (g_il2cpp_base == 0) {
         LOGE("等待 %s 载入超时", kLibIl2cpp);
         return;
     }
 
-    LOGI("%s loaded @ 0x%" PRIxPTR, kLibIl2cpp, base);
+    LOGI("%s loaded @ 0x%" PRIxPTR, kLibIl2cpp, g_il2cpp_base);
 
     if (!prepare_il2cpp_factory()) {
         return;
     }
 
-    std::vector<void*> targets;
-    targets.reserve(sizeof(kTextSetters) / sizeof(kTextSetters[0]));
-    for (const auto& spec : kTextSetters) {
-        void* target = reinterpret_cast<void*>(base + spec.rva);
-        g_hookMap[target] = &spec;
-        targets.push_back(target);
-    }
-
-    for (void* target : targets) {
-        const auto* spec = g_hookMap[target];
-        const int ret = DobbyInstrument(target, setter_pre_handler);
-        if (ret == 0) {
-            LOGI("Hooked %s @ %p", spec->name, target);
-        } else {
-            LOGE("Hook %s 失败, ret=%d", spec->name, ret);
-        }
-    }
-}
-
-void init_worker() {
-    install_hooks();
+    std::lock_guard<std::mutex> _lk(g_hookMutex);
+    install_hooks_locked();
 }
 
 }  // namespace
@@ -238,6 +278,25 @@ Java_com_tools_module_NativeBridge_init(JNIEnv* env, jclass /*clazz*/) {
     std::thread(init_worker).detach();
 
     (void) env;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_tools_module_NativeBridge_updateHookTargets(JNIEnv* env, jclass /*clazz*/, jlongArray rvas) {
+    if (rvas == nullptr) {
+        return;
+    }
+
+    const jsize len = env->GetArrayLength(rvas);
+    std::vector<uintptr_t> values;
+    values.reserve(static_cast<size_t>(len));
+
+    jlong* elems = env->GetLongArrayElements(rvas, nullptr);
+    for (jsize i = 0; i < len; ++i) {
+        values.push_back(static_cast<uintptr_t>(elems[i]));
+    }
+    env->ReleaseLongArrayElements(rvas, elems, JNI_ABORT);
+
+    update_rvas(values);
 }
 
 jint JNI_OnLoad(JavaVM* vm, void*) {
