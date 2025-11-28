@@ -4,3 +4,4 @@ versionCode=1
 author=PenguinAndy
 description=文本提取工具
 minApi=21
+package=com.tools.textextracttool

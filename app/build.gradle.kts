@@ -37,6 +37,18 @@ android {
     buildFeatures {
         compose = true
     }
+    // Include META-INF as an assets source for LSPosed descriptors, and jniLibs at module root
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("src/main/assets", "${project.rootDir}/META-INF")
+            jniLibs.srcDirs("src/main/jniLibs", "${projectDir}/jniLibs")
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
 }
 
 dependencies {

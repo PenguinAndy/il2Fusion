@@ -1,6 +1,7 @@
 package com.tools.module
 
 import android.content.Context
+import com.tools.textextracttool.BuildConfig
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -15,11 +16,17 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * </pre>
  */
 class MainHook: IXposedHookLoadPackage {
+
+    private companion object {
+        const val TAG = "[TextExtractTool]"
+        const val NATIVE_LIB = "native_hook"
+    }
+
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         // ignore self
-        if (lpparam.packageName == "com.tools.module") return
+        if (lpparam.packageName == BuildConfig.APPLICATION_ID) return
 
-        XposedBridge.log("[TextExtractTool] Inject to: ${lpparam.packageName}")
+        XposedBridge.log("$TAG Inject to: ${lpparam.packageName}")
 
         val  cl = lpparam.classLoader
 
@@ -31,22 +38,24 @@ class MainHook: IXposedHookLoadPackage {
             Context::class.java,
             object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
+                    // Keep context for future use (e.g. resource access)
                     val ctx = param.args[0] as Context
+                    XposedBridge.log("$TAG Application.attach -> ctx=$ctx")
 
                     // Load native so
                     try {
-                        System.loadLibrary("native_hook")
-                        XposedBridge.log("[TextExtractTool] native_hook loaded")
+                        System.loadLibrary(NATIVE_LIB)
+                        XposedBridge.log("$TAG $NATIVE_LIB loaded")
                     } catch (e: Throwable) {
-                        XposedBridge.log("[TextExtractTool] loadLibrary failed: $e")
+                        XposedBridge.log("$TAG loadLibrary failed: $e")
                     }
 
                     // native initialize
                     try {
                         NativeBridge.init()
-                        XposedBridge.log("[TextExtractTool] Native init() call")
+                        XposedBridge.log("$TAG Native init() call")
                     } catch (e: Throwable) {
-                        XposedBridge.log("[TextExtractTool] Native init() failed: $e")
+                        XposedBridge.log("$TAG Native init() failed: $e")
                     }
 
                 }
