@@ -1,15 +1,12 @@
 #include "db.h"
 
-#include <android/log.h>
 #include <atomic>
 #include <mutex>
 #include "sqlite3.h"
 #include <string>
 #include <unistd.h>
 
-#define LOG_TAG "[TextExtractTool]"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#include "log.h"
 
 namespace textdb {
 

@@ -1,13 +1,9 @@
-#include <android/log.h>
 #include <jni.h>
 
 #include <atomic>
 #include <chrono>
 #include <cinttypes>
-#include <cstdio>
-#include <cstring>
 #include <dlfcn.h>
-#include <elf.h>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -16,25 +12,15 @@
 
 #include "dobby.h"
 #include "utils/db.h"
+#include "utils/log.h"
 #include "utils/utils.h"
-
-#define LOG_TAG "[TextExtractTool]"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
 
 constexpr const char* kLibIl2cpp = "libil2cpp.so";
 //constexpr const char* kTargetText = "Hook Test";
 
-struct Il2CppString {
-    void* klass;
-    void* monitor;
-    int32_t length;
-    char16_t chars[1];
-};
-
-using Il2CppStringNewFn = Il2CppString* (*)(const char*);
+using Il2CppStringNewFn = textutils::Il2CppString* (*)(const char*);
 
 struct HookRegistry {
     std::unordered_map<void*, uintptr_t> targets;  // address -> rva
@@ -49,279 +35,6 @@ uintptr_t g_il2cpp_base = 0;
 Il2CppStringNewFn g_stringNew = nullptr;
 std::string g_process_name = "unknown";
 
-uintptr_t find_module_base(const char* name) {
-    FILE* fp = fopen("/proc/self/maps", "r");
-    if (!fp) {
-        return 0;
-    }
-
-    char line[512];
-    while (fgets(line, sizeof(line), fp)) {
-        if (strstr(line, name) == nullptr) {
-            continue;
-        }
-
-        uintptr_t start = 0;
-        if (sscanf(line, "%" SCNxPTR "-%*lx", &start) == 1) {
-            fclose(fp);
-            return start;
-        }
-    }
-
-    fclose(fp);
-    return 0;
-}
-
-uintptr_t wait_for_module(const char* name, std::chrono::milliseconds timeout) {
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (std::chrono::steady_clock::now() < deadline) {
-        const auto base = find_module_base(name);
-        if (base != 0) {
-            return base;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    return 0;
-}
-
-std::string find_module_path(const char* name) {
-    FILE* fp = fopen("/proc/self/maps", "r");
-    if (!fp) {
-        return {};
-    }
-
-    char line[512];
-    while (fgets(line, sizeof(line), fp)) {
-        if (strstr(line, name) == nullptr) {
-            continue;
-        }
-        char* path = strchr(line, '/');
-        if (path != nullptr) {
-            const size_t len = strlen(path);
-            if (len > 0 && path[len - 1] == '\n') {
-                path[len - 1] = '\0';
-            }
-            fclose(fp);
-            return std::string(path);
-        }
-    }
-
-    fclose(fp);
-    return {};
-}
-
-uintptr_t find_export_in_elf(const char* path, const char* symbol, uintptr_t base) {
-    if (path == nullptr || symbol == nullptr || base == 0) {
-        return 0;
-    }
-
-    FILE* fp = fopen(path, "rb");
-    if (!fp) {
-        return 0;
-    }
-
-    Elf64_Ehdr ehdr64{};
-    if (fread(&ehdr64, 1, sizeof(ehdr64), fp) != sizeof(ehdr64)) {
-        fclose(fp);
-        return 0;
-    }
-
-    if (memcmp(ehdr64.e_ident, ELFMAG, SELFMAG) != 0) {
-        fclose(fp);
-        return 0;
-    }
-
-    const bool is64 = (ehdr64.e_ident[EI_CLASS] == ELFCLASS64);
-    fseek(fp, 0, SEEK_SET);  // rewind for reuse
-
-    if (is64) {
-        if (ehdr64.e_shentsize != sizeof(Elf64_Shdr)) {
-            fclose(fp);
-            return 0;
-        }
-        std::vector<Elf64_Shdr> shdrs(ehdr64.e_shnum);
-        fseek(fp, static_cast<long>(ehdr64.e_shoff), SEEK_SET);
-        if (fread(shdrs.data(), sizeof(Elf64_Shdr), shdrs.size(), fp) != shdrs.size()) {
-            fclose(fp);
-            return 0;
-        }
-
-        for (const auto& shdr : shdrs) {
-            if (shdr.sh_type != SHT_DYNSYM || shdr.sh_entsize != sizeof(Elf64_Sym)) {
-                continue;
-            }
-            if (shdr.sh_link >= shdrs.size()) {
-                continue;
-            }
-            const Elf64_Shdr& strhdr = shdrs[shdr.sh_link];
-            std::vector<char> strtab(strhdr.sh_size);
-            fseek(fp, static_cast<long>(strhdr.sh_offset), SEEK_SET);
-            if (fread(strtab.data(), 1, strtab.size(), fp) != strtab.size()) {
-                continue;
-            }
-
-            const size_t count = shdr.sh_size / sizeof(Elf64_Sym);
-            std::vector<Elf64_Sym> syms(count);
-            fseek(fp, static_cast<long>(shdr.sh_offset), SEEK_SET);
-            if (fread(syms.data(), sizeof(Elf64_Sym), syms.size(), fp) != syms.size()) {
-                continue;
-            }
-
-            for (const auto& sym : syms) {
-                if (sym.st_name >= strtab.size()) {
-                    continue;
-                }
-                const char* name = strtab.data() + sym.st_name;
-                if (strcmp(name, symbol) == 0 && sym.st_value != 0) {
-                    fclose(fp);
-                    return base + static_cast<uintptr_t>(sym.st_value);
-                }
-            }
-        }
-    } else {
-        Elf32_Ehdr ehdr32{};
-        if (fread(&ehdr32, 1, sizeof(ehdr32), fp) != sizeof(ehdr32)) {
-            fclose(fp);
-            return 0;
-        }
-        if (ehdr32.e_shentsize != sizeof(Elf32_Shdr)) {
-            fclose(fp);
-            return 0;
-        }
-        std::vector<Elf32_Shdr> shdrs(ehdr32.e_shnum);
-        fseek(fp, static_cast<long>(ehdr32.e_shoff), SEEK_SET);
-        if (fread(shdrs.data(), sizeof(Elf32_Shdr), shdrs.size(), fp) != shdrs.size()) {
-            fclose(fp);
-            return 0;
-        }
-
-        for (const auto& shdr : shdrs) {
-            if (shdr.sh_type != SHT_DYNSYM || shdr.sh_entsize != sizeof(Elf32_Sym)) {
-                continue;
-            }
-            if (shdr.sh_link >= shdrs.size()) {
-                continue;
-            }
-            const Elf32_Shdr& strhdr = shdrs[shdr.sh_link];
-            std::vector<char> strtab(strhdr.sh_size);
-            fseek(fp, static_cast<long>(strhdr.sh_offset), SEEK_SET);
-            if (fread(strtab.data(), 1, strtab.size(), fp) != strtab.size()) {
-                continue;
-            }
-
-            const size_t count = shdr.sh_size / sizeof(Elf32_Sym);
-            std::vector<Elf32_Sym> syms(count);
-            fseek(fp, static_cast<long>(shdr.sh_offset), SEEK_SET);
-            if (fread(syms.data(), sizeof(Elf32_Sym), syms.size(), fp) != syms.size()) {
-                continue;
-            }
-
-            for (const auto& sym : syms) {
-                if (sym.st_name >= strtab.size()) {
-                    continue;
-                }
-                const char* name = strtab.data() + sym.st_name;
-                if (strcmp(name, symbol) == 0 && sym.st_value != 0) {
-                    fclose(fp);
-                    return base + static_cast<uintptr_t>(sym.st_value);
-                }
-            }
-        }
-    }
-
-    fclose(fp);
-    return 0;
-}
-
-void append_utf8(std::string& out, uint32_t cp) {
-    if (cp <= 0x7F) {
-        out.push_back(static_cast<char>(cp));
-    } else if (cp <= 0x7FF) {
-        out.push_back(static_cast<char>(0xC0 | ((cp >> 6) & 0x1F)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    } else if (cp <= 0xFFFF) {
-        out.push_back(static_cast<char>(0xE0 | ((cp >> 12) & 0x0F)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    } else if (cp <= 0x10FFFF) {
-        out.push_back(static_cast<char>(0xF0 | ((cp >> 18) & 0x07)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    } else {
-        out.push_back('?');
-    }
-}
-
-std::string utf16_to_utf8(const char16_t* data, int32_t len) {
-    std::string out;
-    out.reserve(static_cast<size_t>(len) * 3);
-
-    for (int32_t i = 0; i < len; ++i) {
-        uint32_t cp = data[i];
-
-        // Handle surrogate pairs
-        if (cp >= 0xD800 && cp <= 0xDBFF && (i + 1) < len) {
-            const uint32_t low = data[i + 1];
-            if (low >= 0xDC00 && low <= 0xDFFF) {
-                cp = 0x10000 + (((cp - 0xD800) << 10) | (low - 0xDC00));
-                ++i;
-            } else {
-                cp = '?';
-            }
-        } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
-            cp = '?';
-        }
-
-        append_utf8(out, cp);
-    }
-
-    return out;
-}
-
-std::string describe_il2cpp_string(Il2CppString* str) {
-    if (str == nullptr) {
-        return "<null>";
-    }
-
-    const int32_t len = str->length;
-    if (len <= 0 || len > 0x1000) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "<length=%d>", len);
-        return std::string(buf);
-    }
-
-    return utf16_to_utf8(str->chars, len);
-}
-
-void* get_second_arg(DobbyRegisterContext* ctx) {
-#if defined(__aarch64__)
-    return reinterpret_cast<void*>(ctx->general.regs.x1);
-#elif defined(__arm__)
-    return reinterpret_cast<void*>(ctx->general.regs.r1);
-#elif defined(__x86_64__)
-    return reinterpret_cast<void*>(ctx->general.regs.rsi);
-#elif defined(__i386__)
-    return nullptr;  // extend if needed
-#else
-    return nullptr;
-#endif
-}
-
-void set_second_arg(DobbyRegisterContext* ctx, void* value) {
-#if defined(__aarch64__)
-    ctx->general.regs.x1 = reinterpret_cast<uint64_t>(value);
-#elif defined(__arm__)
-    ctx->general.regs.r1 = reinterpret_cast<uint32_t>(value);
-#elif defined(__x86_64__)
-    ctx->general.regs.rsi = reinterpret_cast<uint64_t>(value);
-#elif defined(__i386__)
-    (void) value;  // extend if needed
-#else
-    (void) value;
-#endif
-}
-
 void setter_pre_handler(void* address, DobbyRegisterContext* ctx) {
     HookRegistry* registry = g_registry.load();
     uintptr_t rva = 0;
@@ -332,8 +45,9 @@ void setter_pre_handler(void* address, DobbyRegisterContext* ctx) {
         }
     }
 
-    void* arg = get_second_arg(ctx);
-    const auto original = describe_il2cpp_string(reinterpret_cast<Il2CppString*>(arg));
+    void* arg = hookutils::GetSecondArg(ctx);
+    const auto original = textutils::DescribeIl2CppString(
+            reinterpret_cast<textutils::Il2CppString*>(arg));
 
     if (!original.empty()) {
         const bool filtered = textutils::ShouldFilter(original);
@@ -358,7 +72,7 @@ void setter_pre_handler(void* address, DobbyRegisterContext* ctx) {
     // if (newStr == nullptr) {
     //     return;
     // }
-    // set_second_arg(ctx, newStr);
+    // hookutils::SetSecondArg(ctx, newStr);
 }
 
 void* open_il2cpp_handle() {
@@ -368,7 +82,7 @@ void* open_il2cpp_handle() {
         return handle;
     }
 
-    const std::string path = find_module_path(kLibIl2cpp);
+    const std::string path = hookutils::FindModulePath(kLibIl2cpp);
     if (!path.empty()) {
         handle = dlopen(path.c_str(), RTLD_NOW | RTLD_GLOBAL | RTLD_NOLOAD);
         if (handle) {
@@ -395,8 +109,8 @@ bool prepare_il2cpp_factory() {
     }
 
     if (!g_stringNew) {
-        const std::string path = find_module_path(kLibIl2cpp);
-        const uintptr_t addr = find_export_in_elf(path.c_str(), "il2cpp_string_new", g_il2cpp_base);
+        const std::string path = hookutils::FindModulePath(kLibIl2cpp);
+        const uintptr_t addr = hookutils::FindExportInElf(path.c_str(), "il2cpp_string_new", g_il2cpp_base);
         if (addr != 0) {
             g_stringNew = reinterpret_cast<Il2CppStringNewFn>(addr);
         }
@@ -472,7 +186,7 @@ void update_rvas(const std::vector<uintptr_t>& newRvas) {
 void init_worker() {
     textdb::Init(g_process_name, true);
 
-    g_il2cpp_base = wait_for_module(kLibIl2cpp, std::chrono::seconds(10));
+    g_il2cpp_base = hookutils::WaitForModule(kLibIl2cpp, std::chrono::seconds(10));
     if (g_il2cpp_base == 0) {
         LOGI("[%s] 等待 %s 载入超时，当前进程可能未使用 Unity/il2cpp", g_process_name.c_str(), kLibIl2cpp);
         return;

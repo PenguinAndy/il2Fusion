@@ -17,6 +17,7 @@ add_library(
 target_include_directories(
         native_hook PRIVATE
         ${CMAKE_SYSROOT}/usr/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/utils
 )
 
