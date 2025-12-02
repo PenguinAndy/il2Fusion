@@ -9,6 +9,13 @@ add_library(
         native_hook
         SHARED
         native_hook.cpp
+        il2CppDumper/hack.cpp
+        il2CppDumper/il2cpp_dump.cpp
+        il2CppDumper/xdl/xdl.c
+        il2CppDumper/xdl/xdl_iterate.c
+        il2CppDumper/xdl/xdl_linker.c
+        il2CppDumper/xdl/xdl_lzma.c
+        il2CppDumper/xdl/xdl_util.c
         utils/db.cpp
         utils/sqlite3.c
         utils/utils.cpp
@@ -19,6 +26,8 @@ target_include_directories(
         ${CMAKE_SYSROOT}/usr/include
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/utils
+        ${CMAKE_CURRENT_SOURCE_DIR}/il2CppDumper
+        ${CMAKE_CURRENT_SOURCE_DIR}/il2CppDumper/xdl/include
 )
 
 add_library(DOBBY_LIB STATIC IMPORTED)

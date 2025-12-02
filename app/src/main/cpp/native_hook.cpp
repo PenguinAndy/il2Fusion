@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "dobby.h"
+#include "il2CppDumper/hack.h"
 #include "utils/db.h"
 #include "utils/log.h"
 #include "utils/utils.h"
@@ -34,6 +35,33 @@ std::atomic<HookRegistry*> g_registry{nullptr};
 uintptr_t g_il2cpp_base = 0;
 Il2CppStringNewFn g_stringNew = nullptr;
 std::string g_process_name = "unknown";
+std::atomic_bool g_dump_enabled{false};
+std::atomic_bool g_dump_started{false};
+std::string g_dump_dir;
+
+void trigger_dump_async() {
+    if (!g_dump_enabled.load()) {
+        return;
+    }
+    if (g_dump_started.exchange(true)) {
+        return;
+    }
+    if (g_dump_dir.empty()) {
+        LOGE("trigger_dump skipped: dump dir empty");
+        g_dump_started.store(false);
+        return;
+    }
+    std::thread([] {
+        const uintptr_t base = hookutils::WaitForModule(kLibIl2cpp, std::chrono::seconds(30));
+        if (base == 0) {
+            LOGE("dump wait libil2cpp timeout");
+            g_dump_started.store(false);
+            return;
+        }
+        LOGI("dump begin, libil2cpp @ 0x%" PRIxPTR, base);
+        hack_prepare(g_dump_dir.c_str(), nullptr, 0);
+    }).detach();
+}
 
 void setter_pre_handler(void* address, DobbyRegisterContext* ctx) {
     HookRegistry* registry = g_registry.load();
@@ -242,6 +270,23 @@ Java_com_tools_module_NativeBridge_setConfig(JNIEnv* env, jclass /*clazz*/, jlon
     env->ReleaseLongArrayElements(rvas, elems, JNI_ABORT);
 
     update_rvas(values);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_tools_module_NativeBridge_startDump(JNIEnv* env, jclass /*clazz*/, jstring dataDir) {
+    const char* path = dataDir != nullptr ? env->GetStringUTFChars(dataDir, nullptr) : nullptr;
+    if (path != nullptr && path[0] != '\0') {
+        g_dump_dir.assign(path);
+        env->ReleaseStringUTFChars(dataDir, path);
+        g_dump_enabled.store(true);
+        g_dump_started.store(false);
+    } else {
+        LOGE("startDump skipped: dataDir is null or empty");
+        g_dump_dir.clear();
+        g_dump_enabled.store(false);
+        return;
+    }
+    trigger_dump_async();
 }
 
 jint JNI_OnLoad(JavaVM* vm, void*) {

@@ -85,6 +85,7 @@ fun HookConfigScreen() {
 
     LaunchedEffect(Unit) {
         val saved = HookConfigStore.loadRvasForApp(context)
+        dumpModeEnabled = HookConfigStore.loadDumpModeForApp(context)
         if (saved.isEmpty()) {
             rvaList.clear()
             rvaList.addAll(defaultRvas)
@@ -123,13 +124,16 @@ fun HookConfigScreen() {
             ) {
                 Column {
                     Text("Il2CppDumper 启动模式")
-                    Text(if (dumpModeEnabled) "已开启（具体逻辑 TODO）" else "已关闭")
+                    Text(if (dumpModeEnabled) "已开启（仅 dump，不拦截文本）" else "已关闭（仅拦截文本）")
                 }
                 Switch(
                     checked = dumpModeEnabled,
                     onCheckedChange = { checked ->
                         dumpModeEnabled = checked
-                        // TODO: 根据模式调整后续处理
+                        scope.launch {
+                            HookConfigStore.saveDumpMode(context, checked)
+                            snackbarHostState.showSnackbar(if (checked) "已切换到 Dump 模式" else "已切换到 文本拦截 模式")
+                        }
                     }
                 )
             }

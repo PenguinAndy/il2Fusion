@@ -15,6 +15,7 @@ class ConfigContentProvider : ContentProvider() {
         private const val AUTHORITY = "com.tools.textextracttool.provider"
         private const val PATH_CONFIG = "config"
         const val KEY_RVAS = "rvas"
+        const val KEY_DUMP_MODE = "dump_mode"
         private const val CODE_CONFIG = 1
         val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY/$PATH_CONFIG")
 

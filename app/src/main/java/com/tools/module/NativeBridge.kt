@@ -10,4 +10,5 @@ package com.tools.module
 object NativeBridge {
     @JvmStatic external fun init(processName: String)
     @JvmStatic external fun setConfig(targets: LongArray)
+    @JvmStatic external fun startDump(dataDir: String)
 }

@@ -76,19 +76,36 @@ class MainHook: IXposedHookLoadPackage {
                         XposedBridge.log("$TAG Native init() failed: $e")
                     }
 
-                    // 下发当前配置的 RVA 列表
-                    try {
-                        val rvas = HookConfigStore.loadRvasForHook(ctx).toLongArray()
-                        NativeBridge.setConfig(rvas)
-                        XposedBridge.log("$TAG setConfig -> ${rvas.joinToString()}")
-                        // 如果当前列表为空，延迟重试几次，避免主进程早于配置写入完成
-                        if (rvas.isEmpty()) {
-                            retryLoadRvas(ctx, 3, 500L)
-                        }
+                    val dumpMode = try {
+                        HookConfigStore.loadDumpModeForHook(ctx)
                     } catch (e: Throwable) {
-                        XposedBridge.log("$TAG setConfig failed: $e")
+                        XposedBridge.log("$TAG loadDumpMode failed: $e")
+                        false
                     }
 
+                    if (dumpMode) {
+                        // Dump 模式：启动 il2cpp dumper，不做文本拦截
+                        try {
+                            val dir = ctx.dataDir?.absolutePath ?: ""
+                            NativeBridge.startDump(dir)
+                            XposedBridge.log("$TAG startDump -> $dir")
+                        } catch (e: Throwable) {
+                            XposedBridge.log("$TAG startDump failed: $e")
+                        }
+                    } else {
+                        // 文本拦截模式：下发 RVA 列表，开启文本日志
+                        try {
+                            val rvas = HookConfigStore.loadRvasForHook(ctx).toLongArray()
+                            NativeBridge.setConfig(rvas)
+                            XposedBridge.log("$TAG setConfig -> ${rvas.joinToString()}")
+                            // 如果当前列表为空，延迟重试几次，避免主进程早于配置写入完成
+                            if (rvas.isEmpty()) {
+                                retryLoadRvas(ctx, 3, 500L)
+                            }
+                        } catch (e: Throwable) {
+                            XposedBridge.log("$TAG setConfig failed: $e")
+                        }
+                    }
                 }
             }
         )

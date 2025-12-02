@@ -5,6 +5,7 @@ import android.util.Log
 import android.content.ContentValues
 import com.tools.textextracttool.config.ConfigContentProvider.Companion.CONTENT_URI
 import com.tools.textextracttool.config.ConfigContentProvider.Companion.KEY_RVAS
+import com.tools.textextracttool.config.ConfigContentProvider.Companion.KEY_DUMP_MODE
 
 object HookConfigStore {
     private const val TAG = "[TextExtractTool]"
@@ -19,6 +20,16 @@ object HookConfigStore {
         Log.i(TAG, "saveRvas(): stored ${rvas.size} items -> $text via provider")
     }
 
+    fun saveDumpMode(ctx: Context, enabled: Boolean) {
+        val storeCtx = ctx.applicationContext ?: ctx
+        val values = ContentValues().apply {
+            put("key", KEY_DUMP_MODE)
+            put("value", if (enabled) "1" else "0")
+        }
+        storeCtx.contentResolver.insert(CONTENT_URI, values)
+        Log.i(TAG, "saveDumpMode(): $enabled")
+    }
+
     fun loadRvasForApp(ctx: Context): List<Long> {
         val storeCtx = ctx.applicationContext ?: ctx
         return queryRvas(storeCtx)
@@ -26,6 +37,15 @@ object HookConfigStore {
 
     fun loadRvasForHook(ctx: Context): List<Long> {
         return queryRvas(ctx)
+    }
+
+    fun loadDumpModeForApp(ctx: Context): Boolean {
+        val storeCtx = ctx.applicationContext ?: ctx
+        return queryDumpMode(storeCtx)
+    }
+
+    fun loadDumpModeForHook(ctx: Context): Boolean {
+        return queryDumpMode(ctx)
     }
 
     fun markHookedPackage(ctx: Context, pkg: String): Set<String> {
@@ -43,6 +63,29 @@ object HookConfigStore {
                 val trimmed = it.trim()
                 if (trimmed.isEmpty()) null else trimmed.toLongOrNull()
             }
+    }
+
+    private fun queryDumpMode(ctx: Context): Boolean {
+        val cursor = try {
+            ctx.contentResolver.query(CONTENT_URI, null, null, null, null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "queryDumpMode() failed: ${t.message}")
+            null
+        } ?: return false
+
+        cursor.use { c ->
+            if (!c.moveToFirst()) return false
+            val keyIdx = c.getColumnIndex("key")
+            val valIdx = c.getColumnIndex("value")
+            do {
+                val key = if (keyIdx >= 0) c.getString(keyIdx) else ""
+                val value = if (valIdx >= 0) c.getString(valIdx) else ""
+                if (key == KEY_DUMP_MODE) {
+                    return value == "1" || value.equals("true", ignoreCase = true)
+                }
+            } while (c.moveToNext())
+        }
+        return false
     }
 
     private fun queryRvas(ctx: Context): List<Long> {
