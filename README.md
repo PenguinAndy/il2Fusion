@@ -7,7 +7,7 @@ il2Fusion
 
 LSPosed（Java 层 hook）+ Dobby（Native 层 hook）+ ContentProvider 跨进程通信的架构，围绕 Il2Cpp Dump/工具链的开源项目。
 
-English version: see `doc/README_EN.md`.
+English version: see [README_EN](https://github.com/PenguinAndy/il2Fusion/blob/master/doc/README_EN.md).
 
 <p align="center">
   <img src="doc/imgs/Screenshot_01.png" alt="il2Fusion screenshot 1" width="260" />
