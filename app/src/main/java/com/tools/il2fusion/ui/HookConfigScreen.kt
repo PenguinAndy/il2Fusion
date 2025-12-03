@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,10 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,11 +36,15 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -67,6 +75,8 @@ fun HookConfigApp(viewModel: HookConfigViewModel = viewModel()) {
         ) { uri ->
             viewModel.onFilePicked(context, uri)
         }
+        val tabs = remember { SideTab.entries.toList() }
+        var selectedTab by rememberSaveable { mutableStateOf(SideTab.HookConfig) }
 
         LaunchedEffect(Unit) {
             viewModel.loadInitial(context)
@@ -84,20 +94,119 @@ fun HookConfigApp(viewModel: HookConfigViewModel = viewModel()) {
             containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { inner ->
-            HookConfigScreen(
-                state = state,
-                onDumpModeChanged = { viewModel.onDumpModeChanged(context, it) },
-                onRvaChanged = viewModel::onRvaChanged,
-                onAddRva = viewModel::onAddRva,
-                onRemoveRva = viewModel::onRemoveRva,
-                onSave = { viewModel.onSave(context) },
-                onRestoreDefault = { viewModel.onRestoreDefault(context) },
-                onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+            Row(
                 modifier = Modifier
+                    .fillMaxSize()
                     .padding(inner)
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { focusManager.clearFocus() })
+            ) {
+                SideNav(
+                    tabs = tabs,
+                    selected = selectedTab,
+                    onSelect = { selectedTab = it },
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .widthIn(min = 64.dp, max = 80.dp)
+                )
+
+                VerticalDivider(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(1.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { focusManager.clearFocus() })
+                        }
+                ) {
+                    when (selectedTab) {
+                        SideTab.HookConfig -> HookConfigScreen(
+                            state = state,
+                            onDumpModeChanged = { viewModel.onDumpModeChanged(context, it) },
+                            onRvaChanged = viewModel::onRvaChanged,
+                            onAddRva = viewModel::onAddRva,
+                            onRemoveRva = viewModel::onRemoveRva,
+                            onSave = { viewModel.onSave(context) },
+                            onRestoreDefault = { viewModel.onRestoreDefault(context) },
+                            onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
+                }
+            }
+        }
+    }
+}
+
+enum class SideTab(val title: String) {
+    HookConfig("Hook")
+}
+
+/**
+ * Simple left rail for feature tabs, ready to expand with more pages.
+ */
+@Composable
+fun SideNav(
+    tabs: List<SideTab>,
+    selected: SideTab,
+    onSelect: (SideTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .background(Color.Transparent)
+            .padding(horizontal = 6.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        tabs.forEach { tab ->
+            SideNavItem(
+                tab = tab,
+                selected = tab == selected,
+                onClick = { onSelect(tab) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SideNavItem(
+    tab: SideTab,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    }
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        ),
+        modifier = Modifier
+            .size(52.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = tab.title,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = contentColor
             )
         }
     }
