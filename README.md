@@ -1,43 +1,58 @@
 il2Fusion
 ================
 
-基于 LSPosed + native hook（Dobby）/Il2CppDumper 的 Unity 文本截获与 dump 工具。
+<p align="center">
+  <img src="doc/imgs/il2FusionIcon.png" alt="il2Fusion icon" width="233" />
+</p>
 
-架构概览
---------
-- LSPosed 模块入口：`com.tools.module.MainHook`（由 `assets/xposed_init` 指定），在目标进程的 `Application.attach` 后加载 `libnative_hook.so`，调用 JNI。
-- 配置桥：通过 `ContentProvider` (`com.tools.il2fusion.provider/config`) 同步 RVA 列表与 dump 模式开关，插件界面写入 provider，注入进程查询 provider 后调用 JNI 下发。
-- UI 插件：Compose 界面 `HookConfigScreen` 支持多行 RVA 输入（十六进制/十进制）、Il2CppDumper 模式开关，并可从 `.cs` dump 文件解析 `set_Text` 上方的 RVA 自动填充；提示一次只勾选一个应用。
-- Native 框架：`native_hook.cpp` 负责等待 `libil2cpp.so`，按配置安装 Dobby hook 记录文本；在 dump 模式触发 Il2CppDumper (`il2cpp_dump.cpp`) 生成 `dump.cs`，并尝试 `su -c cp` 复制到 `/sdcard/Download/<pkg>.cs`，结果通过 Toast 提示。
-- LSPosed 元数据：`app/src/main/assets/xposed/module.prop`、`app/src/main/assets/xposed_init`、`app/src/main/assets/native_init`。
+LSPosed（Java 层 hook）+ Dobby（Native 层 hook）+ ContentProvider 跨进程通信的架构，围绕 Il2Cpp Dump/工具链的开源项目。
 
-使用方法
---------
-1) 设置模式与 RVA  
-   - 打开插件 App，关闭 Il2CppDumper 开关即为“文本拦截”模式：输入/解析 `set_text` 的 RVA（十六进制可用 `0x` 前缀，或从 `.cs` dump 文件自动解析），点击“保存到本地”。  
-   - 打开 Il2CppDumper 开关则仅执行 dump：启动目标 App 后生成 `/data/data/<pkg>/files/dump.cs` 并尝试复制到 `/sdcard/Download/<pkg>.cs`。  
-2) LSPosed 勾选目标应用  
-   - 在 LSPosed 里仅勾选一个目标应用启用本模块（多选会互相覆盖，日志有提示）。  
-3) 启动目标应用验证  
-   - 文本拦截模式：等待 `libil2cpp.so` 后安装 hook，记录传入字符串到本地数据库，logcat 标签 `[il2Fusion]`/`DobbyStub`。  
-   - Dumper 模式：等待 `libil2cpp.so` 后自动 dump，并 Toast 通知结果及复制状态。  
-4) 构建  
-   - `./gradlew :app:assembleDebug`（已启用 CMake，so 名称 `libnative_hook.so`）。  
+English version: see `doc/README_EN.md`.
 
-关于 Dobby
-----------
-- 现在直接使用预编译的静态库 `app/src/main/cpp/libs/<abi>/libdobby.a` + 头文件 `dobby.h`，未做源码改动；CMake 以 IMPORTED STATIC 方式链接。
-- 仓库附带 arm64/armeabi-v7a/x86/x86_64 的 `.a`，但 Gradle 默认 abiFilter 只包含 `arm64-v8a`。如需其它 ABI，补齐对应库并调整 `ndk.abiFilters`。
+<p align="center">
+  <img src="doc/imgs/Screenshot_01.png" alt="il2Fusion screenshot 1" width="260" />
+  <img src="doc/imgs/Screenshot_02.png" alt="il2Fusion screenshot 2" width="260" />
+  <img src="doc/imgs/Screenshot_03.png" alt="il2Fusion screenshot 3" width="260" />
+</p>
 
-目录指引
---------
-- `app/src/main/java/com/tools/module/`：LSPosed 入口、JNI 桥。  
-- `app/src/main/java/com/tools/il2fusion/`：插件 UI、配置存取、dump 文件解析（填充 RVA）。  
-- `app/src/main/cpp/`：native hook 逻辑、Il2CppDumper、Dobby。  
-- `app/src/main/assets/`：LSPosed 模块声明与入口文件。  
+## 功能特性
+- Dump 模式优先：一键触发 Il2CppDumper 生成 `dump.cs`，自动尝试复制到 `/sdcard/Download/<pkg>.cs` 并 Toast 结果；通过 LSPosed+Provider 配置，缓解原版 Zygisk-Il2CppDumper 在配置同步和产物获取上的痛点。
+- 文本拦截：在 `libil2cpp.so` 中按 RVA 安装 hook，记录传入的 `set_Text` 字符串到本地数据库，作为“民间汉化”尝试性的工具能力，欢迎扩展更多玩法。
+- 配置同步：插件 App 写入 `ContentProvider (com.tools.il2fusion.provider/config)`，注入进程读取后下发到 native。
+- 文件解析：可从 `.cs` dump 文件自动解析 `set_Text` 上方的 RVA，支持十六进制/十进制混输。
 
-注意事项
---------
-- 只在单一目标进程中启用模块，避免多应用同时 hook。  
-- RVA 需对应目标版本的 `libil2cpp.so`，否则 hook 失效或崩溃。  
-- 若更换替换文本或增加多语言，请在 `native_hook.cpp` 中调整目标字符串生成逻辑。  
+## 环境要求
+- 已 Root 的设备，Magisk + LSPosed 环境。
+- Android 12+（minSdk 31，targetSdk 35，compileSdk 36）。
+- 默认 ABI：`arm64-v8a`（如需其他 ABI，请补齐 `app/src/main/cpp/libs/<abi>/libdobby.a` 并调整 `ndk.abiFilters`）。
+- 已验证设备：Google Pixel 3 XL，Android 12（SP1A.210812.016.C2 / 8618562）。
+
+## 快速开始
+1) 构建模块：`./gradlew :app:assembleDebug`（包含 CMake，生成 `libnative_hook.so`）。  
+2) 安装并在 LSPosed 勾选目标应用（仅一个）。  
+3) 打开插件 App：  
+   - 关闭 Dump 开关即为“文本拦截”模式，输入/解析 RVA 后“保存到本地”。  
+   - 开启 Dump 开关进入 Dump 模式，启动目标应用后会自动生成 `dump.cs` 并尝试复制到 Download。  
+4) 启动目标应用验证：  
+   - 文本拦截模式：等待 `libil2cpp.so` 后安装 hook，logcat 标签 `[il2Fusion]`/`DobbyStub`，文本存储于 `/data/data/<pkg>/text.db`。  
+   - Dump 模式：等待 `libil2cpp.so` 后自动 dump，并 Toast 提示复制结果。  
+
+## 架构与目录
+- LSPosed 入口：`app/src/main/java/com/tools/module/MainHook.kt`（`assets/xposed_init` 指定），在 `Application.attach` 后加载 `libnative_hook.so` 并调用 JNI。
+- 配置与仓库：`app/src/main/java/com/tools/il2fusion/config/`，通过 `ContentProvider` 同步 Dump 开关与 RVA 列表。
+- Compose UI：`app/src/main/java/com/tools/il2fusion/ui/`，包含三页 Tab 及文件解析逻辑。
+- Native Hook：`app/src/main/cpp/native_hook.cpp` 等，等待 `libil2cpp.so`，使用 Dobby 挂钩并写入 SQLite。
+- Il2CppDumper：`app/src/main/cpp/il2CppDumper/`，Dump 完成后尝试复制到 Download。
+- 资源声明：`app/src/main/assets/xposed/`（模块描述、入口配置）。
+
+## 第三方致谢
+- [jmpews - Dobby](https://github.com/jmpews/Dobby)：轻量级跨平台 hook 框架。
+- [Perfare - Zygisk-Il2CppDumper](https://github.com/Perfare/Zygisk-Il2CppDumper)：Il2CppDumper 实现参考。
+
+## 贡献与反馈
+- 欢迎提交 issue 与 feature 请求，描述清楚环境、目标 App 和期望行为。
+- 也欢迎 PR 修复 bug、完善多 ABI 支持或改进 UI/交互。  
+
+## 免责声明
+- 本项目仅供学习、研究与安全测试之用，不得用于任何违法、侵权或商业牟利场景。
+- 使用者需自行确保遵守所在地法律法规，对由此产生的全部后果自行承担。
