@@ -1,4 +1,4 @@
-package com.tools.textextracttool.ui.theme
+package com.tools.il2fusion.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -34,7 +34,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun TextExtractToolTheme(
+fun Il2FusionTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,

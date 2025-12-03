@@ -1,12 +1,12 @@
-package com.tools.textextracttool.ui
+package com.tools.il2fusion.ui
 
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tools.textextracttool.config.HookConfigRepository
-import com.tools.textextracttool.utils.DumpFileParser
-import com.tools.textextracttool.utils.RvaUtils
+import com.tools.il2fusion.config.HookConfigRepository
+import com.tools.il2fusion.utils.DumpFileParser
+import com.tools.il2fusion.utils.RvaUtils
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -1,4 +1,4 @@
-package com.tools.textextracttool.config
+package com.tools.il2fusion.config
 
 import android.content.ContentProvider
 import android.content.ContentValues
@@ -11,8 +11,8 @@ import android.util.Log
 class ConfigContentProvider : ContentProvider() {
 
     companion object {
-        private const val TAG = "[TextExtractTool]"
-        private const val AUTHORITY = "com.tools.textextracttool.provider"
+        private const val TAG = "[il2Fusion]"
+        private const val AUTHORITY = "com.tools.il2fusion.provider"
         private const val PATH_CONFIG = "config"
         const val KEY_RVAS = "rvas"
         const val KEY_DUMP_MODE = "dump_mode"

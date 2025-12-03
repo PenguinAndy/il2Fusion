@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.tools.textextracttool"
+    namespace = "com.tools.il2fusion"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.tools.textextracttool"
+        applicationId = "com.tools.il2fusion"
         minSdk = 31
         targetSdk = 35
         versionCode = 1

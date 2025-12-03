@@ -1,4 +1,4 @@
-package com.tools.textextracttool.utils
+package com.tools.il2fusion.utils
 
 /**
  * Parses and formats RVA values from user input to keep the UI and storage consistent.

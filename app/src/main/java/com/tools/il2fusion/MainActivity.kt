@@ -1,10 +1,10 @@
-package com.tools.textextracttool
+package com.tools.il2fusion
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.tools.textextracttool.ui.HookConfigApp
+import com.tools.il2fusion.ui.HookConfigApp
 
 /**
  * Hosts the Compose entry point for configuring hook parameters.

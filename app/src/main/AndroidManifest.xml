@@ -10,7 +10,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.TextExtractTool"
+        android:theme="@style/Theme.il2Fusion"
         tools:targetApi="31">
         <meta-data
             android:name="xposedmodule"
@@ -25,7 +25,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.TextExtractTool">
+            android:theme="@style/Theme.il2Fusion">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -34,7 +34,7 @@
         </activity>
         <provider
             android:name=".config.ConfigContentProvider"
-            android:authorities="com.tools.textextracttool.provider"
+            android:authorities="com.tools.il2fusion.provider"
             android:exported="true"
             android:grantUriPermissions="true" />
     </application>

@@ -1,4 +1,4 @@
-package com.tools.textextracttool.config
+package com.tools.il2fusion.config
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers

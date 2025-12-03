@@ -1,4 +1,4 @@
-package com.tools.textextracttool.ui.theme
+package com.tools.il2fusion.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

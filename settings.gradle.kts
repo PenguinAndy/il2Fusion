@@ -20,6 +20,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TextExtractTool"
+rootProject.name = "il2Fusion"
 include(":app")
  

@@ -1,4 +1,4 @@
-package com.tools.textextracttool.ui
+package com.tools.il2fusion.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,7 +49,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.tools.textextracttool.ui.theme.TextExtractToolTheme
+import com.tools.il2fusion.ui.theme.Il2FusionTheme
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -57,7 +57,7 @@ import kotlinx.coroutines.flow.collect
  */
 @Composable
 fun HookConfigApp(viewModel: HookConfigViewModel = viewModel()) {
-    TextExtractToolTheme {
+    Il2FusionTheme {
         val context = LocalContext.current
         val focusManager = LocalFocusManager.current
         val state by viewModel.state.collectAsState()
@@ -182,7 +182,7 @@ fun HeaderCard(dumpModeEnabled: Boolean, savedCount: Int) {
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Text Extract Tool",
+                text = "il2Fusion",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
             )
             Text(

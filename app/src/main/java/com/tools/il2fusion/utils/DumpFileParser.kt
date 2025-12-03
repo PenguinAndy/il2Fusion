@@ -1,4 +1,4 @@
-package com.tools.textextracttool.utils
+package com.tools.il2fusion.utils
 
 import android.content.Context
 import android.net.Uri

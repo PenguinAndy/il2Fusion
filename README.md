@@ -1,4 +1,4 @@
-TextExtractTool
+il2Fusion
 ================
 
 基于 LSPosed + native hook（Dobby）/Il2CppDumper 的 Unity 文本截获与 dump 工具。
@@ -6,7 +6,7 @@ TextExtractTool
 架构概览
 --------
 - LSPosed 模块入口：`com.tools.module.MainHook`（由 `META-INF/xposed_init` 指定），在目标进程的 `Application.attach` 后加载 `libnative_hook.so`，调用 JNI。
-- 配置桥：通过 `ContentProvider` (`com.tools.textextracttool.provider/config`) 同步 RVA 列表与 dump 模式开关，插件界面写入 provider，注入进程查询 provider 后调用 JNI 下发。
+- 配置桥：通过 `ContentProvider` (`com.tools.il2fusion.provider/config`) 同步 RVA 列表与 dump 模式开关，插件界面写入 provider，注入进程查询 provider 后调用 JNI 下发。
 - UI 插件：Compose 界面 `HookConfigScreen` 支持多行 RVA 输入（十六进制/十进制）、Il2CppDumper 模式开关，并可从 `.cs` dump 文件解析 `set_Text` 上方的 RVA 自动填充；提示一次只勾选一个应用。
 - Native 框架：`native_hook.cpp` 负责等待 `libil2cpp.so`，按配置安装 Dobby hook 记录文本；在 dump 模式触发 Il2CppDumper (`il2cpp_dump.cpp`) 生成 `dump.cs`，并尝试 `su -c cp` 复制到 `/sdcard/Download/<pkg>.cs`，结果通过 Toast 提示。
 - LSPosed 元数据：`META-INF/xposed/module.prop`、`META-INF/xposed_init`、`META-INF/native_init` 打包入 assets。
@@ -19,7 +19,7 @@ TextExtractTool
 2) LSPosed 勾选目标应用  
    - 在 LSPosed 里仅勾选一个目标应用启用本模块（多选会互相覆盖，日志有提示）。  
 3) 启动目标应用验证  
-   - 文本拦截模式：等待 `libil2cpp.so` 后安装 hook，记录传入字符串到本地数据库，logcat 标签 `[TextExtractTool]`/`DobbyStub`。  
+   - 文本拦截模式：等待 `libil2cpp.so` 后安装 hook，记录传入字符串到本地数据库，logcat 标签 `[il2Fusion]`/`DobbyStub`。  
    - Dumper 模式：等待 `libil2cpp.so` 后自动 dump，并 Toast 通知结果及复制状态。  
 4) 构建  
    - `./gradlew :app:assembleDebug`（已启用 CMake，so 名称 `libnative_hook.so`）。  
@@ -32,7 +32,7 @@ TextExtractTool
 目录指引
 --------
 - `app/src/main/java/com/tools/module/`：LSPosed 入口、JNI 桥。  
-- `app/src/main/java/com/tools/textextracttool/`：插件 UI、配置存取、dump 文件解析（填充 RVA）。  
+- `app/src/main/java/com/tools/il2fusion/`：插件 UI、配置存取、dump 文件解析（填充 RVA）。  
 - `app/src/main/cpp/`：native hook 逻辑、Il2CppDumper、Dobby。  
 - `META-INF/`：LSPosed 模块声明与入口文件。  
 

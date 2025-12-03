@@ -1,5 +1,5 @@
-#ifndef TEXT_EXTRACT_TOOL_UTILS_H
-#define TEXT_EXTRACT_TOOL_UTILS_H
+#ifndef IL2FUSION_UTILS_H
+#define IL2FUSION_UTILS_H
 
 #include <chrono>
 #include <cstdint>
@@ -30,4 +30,4 @@ void* GetSecondArg(DobbyRegisterContext* ctx);
 void SetSecondArg(DobbyRegisterContext* ctx, void* value);
 }
 
-#endif  // TEXT_EXTRACT_TOOL_UTILS_H
+#endif  // IL2FUSION_UTILS_H

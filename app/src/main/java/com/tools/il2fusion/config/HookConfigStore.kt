@@ -1,14 +1,14 @@
-package com.tools.textextracttool.config
+package com.tools.il2fusion.config
 
 import android.content.Context
 import android.util.Log
 import android.content.ContentValues
-import com.tools.textextracttool.config.ConfigContentProvider.Companion.CONTENT_URI
-import com.tools.textextracttool.config.ConfigContentProvider.Companion.KEY_RVAS
-import com.tools.textextracttool.config.ConfigContentProvider.Companion.KEY_DUMP_MODE
+import com.tools.il2fusion.config.ConfigContentProvider.Companion.CONTENT_URI
+import com.tools.il2fusion.config.ConfigContentProvider.Companion.KEY_RVAS
+import com.tools.il2fusion.config.ConfigContentProvider.Companion.KEY_DUMP_MODE
 
 object HookConfigStore {
-    private const val TAG = "[TextExtractTool]"
+    private const val TAG = "[il2Fusion]"
     fun saveRvas(ctx: Context, rvas: List<Long>) {
         val storeCtx = ctx.applicationContext ?: ctx
         val text = rvas.joinToString(separator = ",")

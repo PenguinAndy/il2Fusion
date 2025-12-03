@@ -1,7 +1,7 @@
 package com.tools.module
 
 import android.content.Context
-import com.tools.textextracttool.config.HookConfigStore
+import com.tools.il2fusion.config.HookConfigStore
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.IXposedHookZygoteInit
 import de.robv.android.xposed.XC_MethodHook
@@ -21,9 +21,9 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 class MainHook: IXposedHookLoadPackage {
 
     private companion object {
-        const val TAG = "[TextExtractTool]"
+        const val TAG = "[il2Fusion]"
         const val NATIVE_LIB = "native_hook"
-        const val MODULE_PKG = "com.tools.textextracttool"
+        const val MODULE_PKG = "com.tools.il2fusion"
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {

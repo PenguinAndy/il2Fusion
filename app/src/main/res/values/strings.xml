@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">TextExtractTool</string>
+    <string name="app_name">il2Fusion</string>
     <string name="module_desc">Unity text extraction/replace helper via LSPosed</string>
 </resources>

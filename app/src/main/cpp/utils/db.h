@@ -1,5 +1,5 @@
-#ifndef TEXT_EXTRACT_TOOL_DB_H
-#define TEXT_EXTRACT_TOOL_DB_H
+#ifndef IL2FUSION_DB_H
+#define IL2FUSION_DB_H
 
 #include <string>
 
@@ -13,4 +13,4 @@ void InsertIfNeeded(const std::string& text);
 
 }  // namespace textdb
 
-#endif  // TEXT_EXTRACT_TOOL_DB_H
+#endif  // IL2FUSION_DB_H
