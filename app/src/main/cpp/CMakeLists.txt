@@ -16,6 +16,8 @@ add_library(
         il2CppDumper/xdl/xdl_linker.c
         il2CppDumper/xdl/xdl_lzma.c
         il2CppDumper/xdl/xdl_util.c
+        plugins/dump/dump.cpp
+        plugins/textExtractor/textExtractor.cpp
         utils/db.cpp
         utils/sqlite3.c
         utils/utils.cpp
